@@ -1,0 +1,21 @@
+[package]
+name = "ballast-trend"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Disk growth rate tracker: derivatives of ballast-survey snapshots"
+license = "MIT"
+
+[[bin]]
+name = "ballast-trend"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
