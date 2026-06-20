@@ -1,97 +1,89 @@
 # ballast-trend
 
-**Disk growth rate tracker — derivatives of ballast-survey snapshots.**
+A disk growth-rate tracker that takes the derivative of [`ballast-survey`](https://github.com/j0yen/ballast-survey) snapshots: survey says what is big right now, trend says what is *growing*, how fast, and when it hits the wall.
 
-`ballast-survey` tells you what is big right now.  
-`ballast-trend` tells you what is *growing*, how fast, and when you hit the wall.
+## Why it exists
 
-## TL;DR
+A size ranking is a photograph. It tells you the 14 GB target exists; it does not tell you whether that target has been 14 GB for a month or got there in two days. The thing you actually want to act on is the second derivative of the disk — the path that is accelerating toward the high-water mark, not the one that is merely large and stable.
 
+`ballast-trend` gets that by differencing snapshots over time. Capture a survey now, capture another later, and it reports per-path delta bytes, a bytes/day rate, and an ETA to a configurable high-water mark. It never walks the filesystem itself — `ballast-survey` is the single source of truth — and it never fabricates a rate it cannot honestly compute.
+
+## Install
+
+```sh
+cargo install --path .
 ```
-# Capture a snapshot (pipe ballast-survey output in)
+
+This installs the `ballast-trend` binary.
+
+## Quickstart
+
+```sh
+# Capture a snapshot (pipe ballast-survey --json in)
 ballast-survey --json --root ~/wintermute | ballast-trend snapshot
 
-# Later, capture another one
+# Later, capture another
 ballast-survey --json --root ~/wintermute | ballast-trend snapshot
 
-# See growth rates
+# See growth rates from the two most recent snapshots
 ballast-trend report
 
-# Machine-readable output for downstream tools
+# Machine-readable form for downstream tools
 ballast-trend report --json
 ```
 
-Example output:
-
-```
+```text
 ballast-trend report
   old: 2026-06-15T12:00:00  →  new: 2026-06-16T12:00:00  (24.0h interval)
   high-water mark: 95%
 
-path                                                    new-size        delta      bytes/day  ETA(days)
----------------------------------------------------------------------------------------------------------
-/home/jsy/wintermute/recall/target                        13.8G        +1.4G         +1.4G        5.7
-/home/jsy/wintermute/wintermute-brain/target              14.3G        +0.5G       +500.0M       12.1
-...
-```
-
-## Install
-
-```
-cargo install --path .
-```
-
-Or copy the binary:
-
-```
-cp target/release/ballast-trend ~/.local/bin/
+path                                              new-size   delta    bytes/day  ETA(days)
+-------------------------------------------------------------------------------------------
+/home/jsy/wintermute/recall/target                  13.8G   +1.4G        +1.4G        5.7
+/home/jsy/wintermute/wintermute-brain/target        14.3G   +0.5G      +500.0M       12.1
 ```
 
 ## Subcommands
 
 ### `snapshot`
 
-Reads `ballast-survey --json` from **stdin**, stamps with the current time,
-and appends to a ring at `~/.local/state/ballast/trend/` (default keep-N = 30).
-Oldest snapshots are pruned automatically.
+Reads `ballast-survey --json` from **stdin**, stamps it with the current time, and appends to a ring at `~/.local/state/ballast/trend/` (default keep-N = 30). The oldest snapshots are pruned automatically.
 
-```
-ballast-survey --json --root ~/wintermute | ballast-trend snapshot [--now <RFC3339>] [--keep 30]
+```sh
+ballast-survey --json --root ~/wintermute | ballast-trend snapshot [--now <RFC3339>] [--keep 30] [--state-dir <PATH>]
 ```
 
-`--now` overrides the capture timestamp — useful for deterministic testing.
+`--now` overrides the capture timestamp, for deterministic tests.
 
 ### `report`
 
-Diffs the two most recent snapshots. Reports per-path delta bytes, bytes/day
-growth rate, and ETA to a configurable high-water mark.
+Diffs the two most recent snapshots and reports per-path delta bytes, bytes/day, and ETA to the high-water mark.
 
+```sh
+ballast-trend report [--json] [--high-water-pct 95] [--now <RFC3339>] [--state-dir <PATH>]
 ```
-ballast-trend report [--json] [--high-water-pct 95] [--state-dir <PATH>]
-```
-
-- Growing paths get a bytes/day rate and ETA projection.
-- Paths present only in the new snapshot are labeled **"new — no rate"** and
-  never receive a fabricated rate.
-- Shrinking paths (post-reap) show a negative delta and are **excluded** from
-  ETA projections, with a note.
 
 ## Honesty constraints
 
-- Never extrapolates a rate from a single data point (new paths).
-- Reclamations (shrinking paths) are clearly labeled and excluded from ETA.
-- Never walks the filesystem itself — single source of truth is ballast-survey.
-- Never deletes or mutates survey snapshots.
+The point of a growth tracker is to be trusted, so it refuses to guess:
+
+- A path with only one data point gets no rate — labeled new, never extrapolated.
+- A shrinking path (post-reclamation) shows a negative delta and is excluded from ETA projection, with a note.
+- It never walks the filesystem; the survey snapshot is the only source.
+- It never deletes or mutates a snapshot.
 
 ## Part of the ballast fleet
 
+A family of read-mostly disk-health tools for the wintermute workspace. `ballast-trend` is the time-derivative layer over `ballast-survey`.
+
 | Tool | Job |
 |------|-----|
-| `ballast-survey` | Measure what is big right now |
-| `ballast-trend`  | Measure what is growing and how fast ← you are here |
-| `ballast-guard`  | Alert when disk hits a threshold |
-| `ballast-reap`   | Free fossil build artifacts |
+| [`ballast-survey`](https://github.com/j0yen/ballast-survey) | Measure what is big right now |
+| **`ballast-trend`** | Measure what is growing and how fast ← you are here |
+| [`ballast-guard`](https://github.com/j0yen/ballast-guard) | Watch usage against an SLO; log events; reclaim on opt-in |
+| [`ballast-pilot`](https://github.com/j0yen/ballast-pilot) | Wire the guard to an hourly systemd timer |
+| [`ballast-digest`](https://github.com/j0yen/ballast-digest) | Synthesize survey + trend + events into one ranked block |
 
 ## License
 
-MIT — Joe Yen
+MIT — Joe Yen. See [LICENSE](LICENSE).
